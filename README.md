@@ -3,15 +3,18 @@
 Upload a photo of a table (price list, receipt, etc.) and get back an editable,
 downloadable Excel file. Built with Next.js, Node/Express, and Tesseract OCR.
 
+
 This is the **free-tier MVP**: no login, no payment, no database wired in yet —
 just the core working flow: upload → OCR → editable preview → download.
 Auth, usage limits, and payments are documented (see `backend/db/schema.sql`
 and the architecture docs) but intentionally left out of this first cut so
 you can test the core idea with real users fast.
 
+
 ---
 
 ## What's included
+
 
 ```
 img2excel/
@@ -27,6 +30,7 @@ img2excel/
     └── styles/globals.css
 ```
 
+
 Both the OCR row/column grouping logic and the Excel export were tested
 directly during development and confirmed working correctly.
 
@@ -36,12 +40,15 @@ directly during development and confirmed working correctly.
 
 ### 1. Backend
 
+
 ```bash
 cd backend
+
 npm install
 cp .env.example .env
 npm run dev
 ```
+
 
 Backend runs on `http://localhost:4000`. Health check: `GET /api/health`.
 
@@ -51,12 +58,17 @@ Backend runs on `http://localhost:4000`. Health check: `GET /api/health`.
 
 ### 2. Frontend
 
+
+
 In a separate terminal:
+
 
 ```bash
 cd frontend
 npm install
 npm run dev
+
+
 ```
 
 Frontend runs on `http://localhost:3000` and proxies `/api/*` calls to the
@@ -68,7 +80,9 @@ Open `http://localhost:3000`, upload a clear photo of a simple table
 (a price list, a receipt, anything with rows and columns), review/fix the
 extracted data in the editable grid, and download the `.xlsx` file.
 
+
 ---
+
 
 ## How the OCR → table logic works
 

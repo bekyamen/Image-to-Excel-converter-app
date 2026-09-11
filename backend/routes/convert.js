@@ -2,11 +2,12 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { runOCR } = require('../services/ocr');
-const { generateExcelBuffer } = require('../services/excelExport');
+const { generateExcelBuffer, generateCSVBuffer, generatePDFBuffer } = require('../services/excelExport');
 
 const router = express.Router();
 
@@ -32,8 +33,15 @@ router.post('/convert', authenticateToken, upload.single('image'), async (req, r
       return res.status(402).json({ error: 'No free conversions left. Please pay to continue.' });
     }
 
+    let finalImagePath = imagePath;
+    if (req.body.enhance === 'true') {
+      const enhancedPath = path.join(__dirname, '..', 'uploads', `enh_${req.file.filename}`);
+      await sharp(imagePath).normalize().threshold(180).trim().toFile(enhancedPath);
+      finalImagePath = enhancedPath;
+    }
+
     // 2. Run OCR
-    const table = await runOCR(imagePath);
+    const table = await runOCR(finalImagePath);
     
     // 3. Save Conversion Record
     const result = await db.query(
@@ -48,7 +56,7 @@ router.post('/convert', authenticateToken, upload.single('image'), async (req, r
       await db.query('UPDATE users SET free_conversions_used = free_conversions_used + 1 WHERE id = $1', [userId]);
     }
 
-    res.json({ conversionId, table });
+    res.json({ conversionId, table, filename: req.file.filename });
   } catch (err) {
     console.error('OCR error:', err);
     
@@ -62,28 +70,67 @@ router.post('/convert', authenticateToken, upload.single('image'), async (req, r
       console.error('DB Insert error:', dbErr);
     }
 
-    res.status(500).json({ error: 'Conversion failed. Please try a clearer image.' });
-  } finally {
-    // Delete the uploaded image after processing
-    fs.unlink(imagePath, () => {});
+    let errorMessage = 'Conversion failed. Please try a clearer image.';
+    if (err.message && (err.message.includes('429') || err.message.includes('quota'))) {
+      errorMessage = 'OCR API Quota Exceeded. Please try again in a few moments.';
+    }
+
+    res.status(500).json({ error: errorMessage });
   }
 });
 
-router.post('/convert/:id/export', express.json(), (req, res) => {
+router.post('/convert/:id/export', express.json(), async (req, res) => {
   const edited = req.body && req.body.table ? req.body.table : null;
+  const format = req.body && req.body.format ? req.body.format : 'xlsx';
 
   if (!edited) {
     return res.status(400).json({ error: 'Table data is required for export.' });
   }
 
   try {
-    const buffer = generateExcelBuffer(edited);
-    res.setHeader('Content-Disposition', 'attachment; filename="extracted.xlsx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.send(buffer);
+    if (format === 'csv') {
+      const buffer = generateCSVBuffer(edited);
+      res.setHeader('Content-Disposition', 'attachment; filename="extracted.csv"');
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(buffer);
+    } else if (format === 'pdf') {
+      const buffer = await generatePDFBuffer(edited);
+      res.setHeader('Content-Disposition', 'attachment; filename="extracted.pdf"');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.send(buffer);
+    } else {
+      const buffer = generateExcelBuffer(edited);
+      res.setHeader('Content-Disposition', 'attachment; filename="extracted.xlsx"');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.send(buffer);
+    }
   } catch (err) {
     console.error('Export error:', err);
-    res.status(500).json({ error: 'Could not generate Excel file.' });
+    res.status(500).json({ error: 'Could not generate export file.' });
+  }
+});
+
+router.post('/preprocess', upload.single('image'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image uploaded for preprocessing.' });
+  }
+
+  const inputPath = req.file.path;
+  const outputFilename = `processed_${req.file.filename}`;
+  const outputPath = path.join(__dirname, '..', 'uploads', outputFilename);
+
+  try {
+    await sharp(inputPath)
+      .normalize() // contrast enhancement
+      .threshold(180) // binarization, adjust value if needed
+      .trim() // auto-crop borders loosely
+      .toFile(outputPath);
+      
+    // Send back the processed filename to be used/previewed
+    res.json({ filename: outputFilename });
+  } catch (err) {
+    console.error('Preprocessing error:', err);
+    res.status(500).json({ error: 'Failed to enhance image.' });
   }
 });
 
