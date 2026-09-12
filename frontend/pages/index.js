@@ -13,9 +13,12 @@ const STATUS = {
 export default function Home() {
   const [session, setSession] = useState(null);
   const [usage, setUsage] = useState(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [userFirstName, setUserFirstName] = useState('');
 
   const [status, setStatus] = useState(STATUS.IDLE);
   const [table, setTable] = useState(null);
@@ -36,8 +39,10 @@ export default function Home() {
   // Check Local Storage for session
   useEffect(() => {
     const token = localStorage.getItem('token');
+    const storedFirstName = localStorage.getItem('firstName');
     if (token) {
       setSession(token);
+      setUserFirstName(storedFirstName || 'User');
       fetchUsage(token);
     }
   }, []);
@@ -59,51 +64,39 @@ export default function Home() {
     }
   };
 
-  const handleSendOTP = async (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/otp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber })
-      });
-      if (res.ok) {
-        setOtpSent(true);
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.error);
-      }
-    } catch (err) {
-      setErrorMsg('Failed to send OTP.');
-    }
-  };
+      const endpoint = isLogin ? '/auth/login' : '/auth/register';
+      const payload = isLogin 
+        ? { email, password } 
+        : { firstName, lastName, email, password };
 
-  const handleVerifyOTP = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/otp/verify`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, code: otpCode })
+        body: JSON.stringify(payload)
       });
       
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem('token', data.token);
+        localStorage.setItem('firstName', data.firstName || '');
         setSession(data.token);
+        setUserFirstName(data.firstName || '');
         fetchUsage(data.token);
       } else {
-        setErrorMsg(data.error);
+        setErrorMsg(data.error || 'Authentication failed.');
       }
     } catch (err) {
-      setErrorMsg('Failed to verify OTP.');
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('firstName');
     setSession(null);
     setUsage(null);
     reset();
@@ -237,36 +230,63 @@ export default function Home() {
       <div className="container" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div className="auth-container">
           <div className="eyebrow" style={{justifyContent: 'center', marginBottom: '16px'}}>Img2Excel</div>
-          <h2>Log in to continue</h2>
+          <h2>{isLogin ? 'Log in to continue' : 'Create an account'}</h2>
           <p style={{color: 'var(--ink-soft)', marginBottom: '24px'}}>Convert images to editable spreadsheets in seconds.</p>
           
           {errorMsg && <div className="error-box" style={{margin: '0 0 20px'}}>{errorMsg}</div>}
 
-          {!otpSent ? (
-            <form onSubmit={handleSendOTP}>
-              <input 
-                type="tel" 
-                className="input-field" 
-                placeholder="Phone Number (e.g. +251...)" 
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                required
-              />
-              <button type="submit" className="btn btn-primary" style={{width: '100%'}}>Continue with Phone</button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOTP}>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="Enter 6-digit code (use 123456)" 
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)}
-                required
-              />
-              <button type="submit" className="btn btn-primary" style={{width: '100%'}}>Verify Code</button>
-            </form>
-          )}
+          <form onSubmit={handleAuth}>
+            {!isLogin && (
+              <div style={{display: 'flex', gap: '8px'}}>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="First Name" 
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                />
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  placeholder="Last Name" 
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+            <input 
+              type="email" 
+              className="input-field" 
+              placeholder="Email Address" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <input 
+              type="password" 
+              className="input-field" 
+              placeholder="Password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button type="submit" className="btn btn-primary" style={{width: '100%', marginBottom: '16px'}}>
+              {isLogin ? 'Log In' : 'Sign Up'}
+            </button>
+          </form>
+          <div style={{ textAlign: 'center', fontSize: '13px' }}>
+            <span style={{color: 'var(--ink-soft)'}}>
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+            </span>
+            <span 
+              onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }} 
+              style={{cursor: 'pointer', color: 'var(--primary)', fontWeight: '500'}}
+            >
+              {isLogin ? 'Sign up' : 'Log in'}
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -276,7 +296,7 @@ export default function Home() {
     <div className="container">
       {usage && (
         <div className="user-nav">
-          <span>{phoneNumber}</span>
+          <span>{userFirstName}</span>
           <span className="badge">
             {usage.plan === 'free' ? `${usage.remaining} free left` : 'Pro'}
           </span>

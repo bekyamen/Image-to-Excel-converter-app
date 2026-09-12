@@ -1,53 +1,71 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-development-only';
 
-// Send OTP
-router.post('/otp/send', async (req, res) => {
-  const { phoneNumber } = req.body;
-  if (!phoneNumber) {
-    return res.status(400).json({ error: 'Phone number is required.' });
-  }
+// Register User
+router.post('/register', async (req, res) => {
+  const { firstName, lastName, email, password } = req.body;
 
-  // In production, integrate with Twilio, SNS, or local SMS gateway like InfoBip/SMSGateway.
-  // For MVP / local testing, we assume 123456 is sent.
-  console.log(`Mock OTP 123456 sent to ${phoneNumber}`);
-
-  res.json({ success: true, message: 'OTP sent successfully.' });
-});
-
-// Verify OTP
-router.post('/otp/verify', async (req, res) => {
-  const { phoneNumber, code } = req.body;
-
-  if (code !== '123456') {
-    return res.status(400).json({ error: 'Invalid OTP code.' });
+  if (!firstName || !lastName || !email || !password) {
+    return res.status(400).json({ error: 'All fields are required.' });
   }
 
   try {
-    // 1. Ensure user exists
-    let user = await db.query('SELECT * FROM users WHERE phone_number = $1', [phoneNumber]);
-    let userId;
-
-    if (user.rows.length === 0) {
-      const insertResult = await db.query(
-        'INSERT INTO users (phone_number) VALUES ($1) RETURNING id',
-        [phoneNumber]
-      );
-      userId = insertResult.rows[0].id;
-    } else {
-      userId = user.rows[0].id;
+    const existingUser = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Email is already registered.' });
     }
 
-    // 2. Generate session token
-    const token = jwt.sign({ id: userId, phone_number: phoneNumber }, JWT_SECRET, {
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const insertResult = await db.query(
+      'INSERT INTO users (first_name, last_name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
+      [firstName, lastName, email, passwordHash]
+    );
+
+    const userId = insertResult.rows[0].id;
+
+    const token = jwt.sign({ id: userId, email, firstName }, JWT_SECRET, {
       expiresIn: '30d'
     });
 
-    res.json({ token, userId });
+    res.json({ success: true, token, userId, firstName });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Login User
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    const user = userResult.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, firstName: user.first_name }, JWT_SECRET, {
+      expiresIn: '30d'
+    });
+
+    res.json({ token, userId: user.id, firstName: user.first_name });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error.' });
