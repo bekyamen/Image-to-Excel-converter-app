@@ -44,7 +44,7 @@ export default function Home() {
 
   const fetchUsage = async (token) => {
     try {
-      const res = await fetch('http://localhost:4000/api/user/usage', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/usage`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -63,7 +63,7 @@ export default function Home() {
     e.preventDefault();
     setErrorMsg('');
     try {
-      const res = await fetch('http://localhost:4000/api/auth/otp/send', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber })
@@ -83,7 +83,7 @@ export default function Home() {
     e.preventDefault();
     setErrorMsg('');
     try {
-      const res = await fetch('http://localhost:4000/api/auth/otp/verify', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber, code: otpCode })
@@ -129,7 +129,7 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/convert', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/convert`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session}`
@@ -161,7 +161,7 @@ export default function Home() {
   };
 
   const handleDownload = async (format) => {
-    const res = await fetch(`http://localhost:4000/api/convert/${conversionId}/export`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/convert/${conversionId}/export`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -402,7 +402,7 @@ export default function Home() {
                 <>
                   <img 
                     ref={imgRef}
-                    src={`http://localhost:4000/uploads/${filename}`} 
+                    src={`${process.env.NEXT_PUBLIC_BASE_URL}/uploads/${filename}`} 
                     alt="Original Uploaded Table" 
                   />
                   <canvas ref={canvasRef} className="image-viewer-canvas" />
@@ -445,3 +445,4 @@ export default function Home() {
     </div>
   );
 }
+
