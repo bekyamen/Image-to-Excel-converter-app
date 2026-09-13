@@ -33,12 +33,18 @@ router.post('/convert', authenticateToken, upload.single('image'), async (req, r
       return res.status(402).json({ error: 'No free conversions left. Please pay to continue.' });
     }
 
-    let finalImagePath = imagePath;
+    // Process image: Downsize to max 1600px width and compress to reduce API latency
+    const processedPath = path.join(__dirname, '..', 'uploads', `opt_${req.file.filename}.jpg`);
+    let imageProcessor = sharp(imagePath)
+      .resize({ width: 1600, withoutEnlargement: true })
+      .jpeg({ quality: 80 });
+
     if (req.body.enhance === 'true') {
-      const enhancedPath = path.join(__dirname, '..', 'uploads', `enh_${req.file.filename}`);
-      await sharp(imagePath).normalize().threshold(180).trim().toFile(enhancedPath);
-      finalImagePath = enhancedPath;
+      imageProcessor = imageProcessor.normalize().threshold(180).trim();
     }
+
+    await imageProcessor.toFile(processedPath);
+    const finalImagePath = processedPath;
 
     // 2. Run OCR
     const table = await runOCR(finalImagePath);
